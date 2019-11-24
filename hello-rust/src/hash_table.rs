@@ -2,6 +2,7 @@ use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 use std::convert::TryInto;
 
+
 //Rust port of Jeff Preshing's simple lock-free hash table
 pub struct Entry {
     key: AtomicU32,
@@ -70,9 +71,11 @@ impl HashTable {
 
 	    if result_key == 0 || result_key == key {
 		self.m_entries[HashTable::u32_to_usize(idx)].value.store(value, Ordering::Relaxed);
-		println!("Stored a value at index {}", idx);
+		HashTable::log_message(format!("added value {} at index {}", value, idx), 2);
 		break;
 	    }
+
+	    HashTable::log_message(format!("collision at index {}.. continuing linear search", idx), 2);
 
 	    idx += 1;
 	}
@@ -108,11 +111,33 @@ impl HashTable {
 	key.try_into().unwrap()
     }
 
+    //----------------DEBUG-------------------
+    //a dumb little function cause I can't figure out how
+    //to do debug statements when compiling with cargo
+    //set the if to true for debug messages
+    fn log_message(msg: String, indent_lvl: u32) {
+	if true {
+	    for _ in 0..indent_lvl {
+		print!("\t");
+	    }
+	    println!("{}", msg);
+	}
+    }
+
+    pub fn print_ht_contents(&self) {
+	for i in 0..self.m_array_size {
+	    print!("{}, ", self.m_entries[HashTable::u32_to_usize(i)].value.load(Ordering::Relaxed))
+	}
+    }
+    //-------------END DEBUG-------------------
+
+
     pub fn get_item_count(&self) -> u32 {
 	self.m_array_size
     }
 
     //clear the memory and reinitialize the vector
+    //TODO: get this to work with Arc
     pub fn clear(&mut self){
 
 	self.m_entries.clear();

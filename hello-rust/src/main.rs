@@ -1,19 +1,38 @@
+#[macro_use] extern crate log;
+use std::sync::Arc;
+use std::time::Duration;
+use std::thread;
+use rand::prelude::*;
+
 mod hash_table;
 
 fn main() {
 
-    let mut ht = hash_table::HashTable::new(4);
-    ht.set_item(1,1);
-    ht.set_item(1,2);
-    ht.set_item(2,4);
-    ht.set_item(18,21);
+    let ht = Arc::new(hash_table::HashTable::new(64));
+    let mut handles = vec![];
 
-    println!("{}", ht.get_item(1));
+    for i in 0..4 {
+	println!("Thread {} starting", i);
+        let ht = Arc::clone(&ht);
+        let handle = thread::spawn(move || {
 
-    ht.clear();
+	    for _ in 0..10 {
+		let key = thread_rng().gen::<u32>();
+		let value = thread_rng().gen::<u32>();
 
-    println!("{}", ht.get_item(1));
+		ht.set_item(key, value);
+		println!("\tThread {}: [{}, {}]", i, key, value);
+	    }
+        });
 
+        handles.push(handle);
+    }
 
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    println!("Map contents: ");
+    ht.print_ht_contents();
 
 }
