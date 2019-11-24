@@ -20,7 +20,6 @@ impl Entry {
 pub struct HashTable {
     //size must be known at compile-time for rust arrays
     //Vectors appear to be how to do Java-style arrays
-    //but this isn't working yet
     m_entries: Vec<Entry>,
     m_array_size: u32,
 }
@@ -30,8 +29,14 @@ impl HashTable {
     //constructor
     pub fn new(max_size: u32) -> Self {
 	assert!((max_size & (max_size -1)) == 0);
+
+	let mut my_vec: Vec<Entry> = Vec::new();
+	for _ in 0..max_size {
+	    my_vec.push(Entry::new());
+	}
+
 	Self {
-	    m_entries: vec![Entry::new(); HashTable::u32_to_usize(max_size)],
+	    m_entries: my_vec,
 	    m_array_size: max_size
 	}
     }
@@ -50,7 +55,7 @@ impl HashTable {
 
 
     pub fn set_item(&self, key:u32, value:u32) {
-	//TODO
+
 	//0 reserved for 'empty' value
 	assert!(key != 0);
 	assert!(value != 0);
@@ -63,19 +68,38 @@ impl HashTable {
 
 	    let result_key = self.m_entries[HashTable::u32_to_usize(idx)].key.compare_and_swap(0, key, Ordering::Relaxed);
 
-	    println!("{}", result_key);
-	    break;
-	    //idx+=1;
+	    if result_key == 0 || result_key == key {
+		self.m_entries[HashTable::u32_to_usize(idx)].value.store(value, Ordering::Relaxed);
+		println!("Stored a value at index {}", idx);
+		break;
+	    }
 
+	    idx += 1;
 	}
-
     }
 
+    //Retrieves an item from the hashtable given a key. Returns the value if found, 0 if not found
     pub fn get_item(&self, key:u32) -> u32 {
-	//TODO
-	-1
+
+	assert!(key != 0);
+	let mut idx = HashTable::integer_hash(key);
+
+	loop {
+	    idx &= self.m_array_size - 1;
+
+	    let probed_key = self.m_entries[HashTable::u32_to_usize(idx)].key.load(Ordering::Relaxed);
+	    if probed_key == key {
+		return self.m_entries[HashTable::u32_to_usize(idx)].value.load(Ordering::Relaxed);
+	    }
+	    if probed_key == 0 {
+		return 0
+	    }
+
+	    idx += 1;
+	}
     }
 
+    //a couple utility functions for size conversion
     fn u32_to_usize(key: u32) -> usize {
 	key.try_into().unwrap()
     }
@@ -88,7 +112,16 @@ impl HashTable {
 	self.m_array_size
     }
 
-    pub fn clear(&self){
-	//TODO
+    //clear the memory and reinitialize the vector
+    pub fn clear(&mut self){
+
+	self.m_entries.clear();
+	assert!(self.m_entries.is_empty());
+
+	let mut my_vec: Vec<Entry> = Vec::new();
+	for _ in 0..self.m_array_size {
+	    my_vec.push(Entry::new());
+	}
+	self.m_entries = my_vec;
     }
 }

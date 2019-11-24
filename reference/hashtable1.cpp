@@ -56,7 +56,7 @@ void HashTable1::SetItem(uint32_t key, uint32_t value)
             // The entry was either free, or contains another key.
             if (probedKey != 0)
                 continue;           // Usually, it contains another key. Keep probing.
-                
+
             // The entry was free. Now let's try to take it using a CAS.
             uint32_t prevKey = mint_compare_exchange_strong_32_relaxed(&m_entries[idx].key, 0, key);
             if ((prevKey != 0) && (prevKey != key))
@@ -64,7 +64,7 @@ void HashTable1::SetItem(uint32_t key, uint32_t value)
 
             // Either we just added the key, or another thread did.
         }
-        
+
         // Store the value in this array entry.
         mint_store_32_relaxed(&m_entries[idx].value, value);
         return;
@@ -103,7 +103,7 @@ uint32_t HashTable1::GetItem(uint32_t key)
         if (probedKey == key)
             return mint_load_32_relaxed(&m_entries[idx].value);
         if (probedKey == 0)
-            return 0;          
+            return 0;
     }
 }
 
