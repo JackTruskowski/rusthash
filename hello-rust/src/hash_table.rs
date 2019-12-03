@@ -116,7 +116,7 @@ impl HashTable {
     //to do debug statements when compiling with cargo
     //set the if to true for debug messages
     fn log_message(msg: String, indent_lvl: u32) {
-	if true {
+	if false {
 	    for _ in 0..indent_lvl {
 		print!("\t");
 	    }

@@ -1,26 +1,30 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use core::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use rand::prelude::*;
 
 mod hash_table;
 
-fn main() {
+//
+//@param Hash table size
+//@param Number of inserts for each thread
+//@param Number of threads
+fn insert(ht: hash_table::HashTable, adds_per_thread: i32, num_threads: i32) {
 
-    //hyperparameters
-    let HT_SIZE = 1024;
-    let ADDS_PER_THREAD = 10;
-    let NUM_THREADS = 20;
 
-    let ht = Arc::new(hash_table::HashTable::new(HT_SIZE));
+    let ht = Arc::new(ht);
     let mut handles = vec![];
-    let mut stored_keys: Vec<u32> = Vec::new();
+
+    let stored_keys = Arc::new(Mutex::new(Vec::new()));
     let total_duration = Arc::new(Mutex::new(Duration::new(0,0)));
 
 
-    for i in 0..NUM_THREADS {
+    for i in 0..num_threads {
 	println!("Thread {} starting", i);
+
+	//clone shared data structures so they're visible
+	//to all threads
+	let sk = Arc::clone(&stored_keys);
         let ht = Arc::clone(&ht);
 	let total_duration = Arc::clone(&total_duration);
 
@@ -28,19 +32,25 @@ fn main() {
 
 	    let mut total_time = Duration::new(0,0);
 
-	    for _ in 0..ADDS_PER_THREAD {
+	    for _ in 0..adds_per_thread {
+
+		//randomly generate and add a (key, value)
 		let key = thread_rng().gen::<u32>();
 		let value = thread_rng().gen::<u32>();
-		stored_keys.push(key);
+		{
+		    let mut s = sk.lock().unwrap();
+		    s.push(key);
+		}
 
+		//measure the time to add
 		let start = Instant::now();
 		ht.set_item(key, value);
-
 		let elapsed_time = start.elapsed();
+
 		total_time += elapsed_time;
 
 
-		println!("\tThread {}: [{}, {}] in {:?}", i, key, value, elapsed_time);
+		//println!("\tThread {}: [{}, {}] in {:?}", i, key, value, elapsed_time);
 	    }
 
 	    //update time using a Mutex
@@ -58,12 +68,22 @@ fn main() {
         handle.join().unwrap();
     }
 
-    let float_millis = total_duration.lock().unwrap().as_nanos() as f64;
-    let total_adds = (NUM_THREADS * ADDS_PER_THREAD) as f64;
-
+    let len = stored_keys.lock().unwrap().len();
+    for idx in 0..len {
+     	println!("{}", stored_keys.lock().unwrap()[idx]);
+    }
 
     println!("----------------------------------------");
-    println!("Total number of insertions: {:?}", (NUM_THREADS * ADDS_PER_THREAD));
+    println!("Number of Threads: {}", num_threads);
+    println!("Total number of insertions: {:?}", (num_threads * adds_per_thread));
     println!("Total wall-time of insertions: {:?}", total_duration.lock().unwrap());
     println!("Average wall-time of insertions: {}ns", (float_millis / total_adds));
+}
+
+
+fn main() {
+
+    let ht = hash_table::HashTable::new(1024);
+    insert(ht, 150, 5);
+
 }
