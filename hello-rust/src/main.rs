@@ -6,10 +6,10 @@ use rand::prelude::*;
 mod hash_table;
 
 //
-//@param Hash table size
+//@param Hash table
 //@param Number of inserts for each thread
 //@param Number of threads
-fn insert(ht: hash_table::HashTable, adds_per_thread: i32, num_threads: i32) {
+fn insert(ht: hash_table::HashTable, adds_per_thread: i32, num_threads: i32) -> Vec<u32> {
 
 
     let ht = Arc::new(ht);
@@ -68,16 +68,24 @@ fn insert(ht: hash_table::HashTable, adds_per_thread: i32, num_threads: i32) {
         handle.join().unwrap();
     }
 
-    let len = stored_keys.lock().unwrap().len();
-    for idx in 0..len {
-     	println!("{}", stored_keys.lock().unwrap()[idx]);
-    }
+    // let len = stored_keys.lock().unwrap().len();
+    // for idx in 0..len {
+    //  	println!("{}", stored_keys.lock().unwrap()[idx]);
+    // }
+
+    let float_millis = total_duration.lock().unwrap().as_nanos() as f64;
+    let total_adds = (num_threads * adds_per_thread) as f64;
 
     println!("----------------------------------------");
     println!("Number of Threads: {}", num_threads);
     println!("Total number of insertions: {:?}", (num_threads * adds_per_thread));
     println!("Total wall-time of insertions: {:?}", total_duration.lock().unwrap());
     println!("Average wall-time of insertions: {}ns", (float_millis / total_adds));
+
+    //return a vector of the keys we just inserted
+    //TODO: fix
+    //(*Arc::make_mut(&mut stored_keys)).get_mut().unwrap()
+    //&*stored_keys.get_mut().unwrap()
 }
 
 
