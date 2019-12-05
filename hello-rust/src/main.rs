@@ -11,60 +11,44 @@ use std::process;
 
 mod hash_table;
 
+const HT_SIZE: u32 = 1048576; //must be power of 2
+const NUM_OPS: i32 = 1000000;
+
 
 //
 //@param Hash table
 //@param Number of inserts for each thread
 //@param Number of threads
-fn insert(ht: hash_table::HashTable, total_adds: i32, num_threads: i32) -> f64 {
+fn insert_and_find(ht: hash_table::HashTable, total_adds: i32, num_threads: i32) -> f64 {
 
     let ht = Arc::new(ht);
     let mut handles = vec![];
 
-    // let stored_keys = Arc::new(Mutex::new(Vec::new()));
-    // let total_duration = Arc::new(Mutex::new(Duration::new(0,0)));
+    let stored_keys = Arc::new(Mutex::new(Vec::new()));
     let adds_per_thread = total_adds / num_threads;
 
+    //TODO: using a mutex while measuring time is probably not good
+    //but might not matter if our metric is speedup rather than throughput
     let start = Instant::now();
     for i in 0..num_threads {
-	//println!("Thread {} starting", i);
 
-	//clone shared data structures so they're visible
-	//to all threads
-	//let sk = Arc::clone(&stored_keys);
         let ht = Arc::clone(&ht);
-	//let total_duration = Arc::clone(&total_duration);
+	let sk = Arc::clone(&stored_keys);
 
         let handle = thread::spawn(move || {
-
-	    //let mut total_time = Duration::new(0,0);
 
 	    for j in 0..adds_per_thread {
 
 		//randomly generate and add a (key, value)
 		let key = thread_rng().gen::<u32>();
 		let value = thread_rng().gen::<u32>();
-		// {
-		//     let mut s = sk.lock().unwrap();
-		//     s.push(key);
-		// }
+		{
+		    let mut s = sk.lock().unwrap();
+		    s.push(key);
+		}
 
-		//measure the time to add
-		//let start = Instant::now();
 		ht.set_item(key, value);
-		//let elapsed_time = start.elapsed();
-
-		//total_time += elapsed_time;
-
-
-		//println!("\tThread {}: [{}, {}] in {:?}", i, key, value, elapsed_time);
 	    }
-
-	    //update time using a Mutex
-	    //{
-	    //let mut num = total_duration.lock().unwrap();
-	    //*num += total_time;
-	    //}
         });
 
         handles.push(handle);
@@ -93,53 +77,41 @@ fn insert(ht: hash_table::HashTable, total_adds: i32, num_threads: i32) -> f64 {
 }
 
 
+fn run_benchmark(ht_size: u32, num_ops: i32, num_threads: i32) -> f64 {
+    let ht = hash_table::HashTable::new(ht_size);
+    insert_and_find(ht, num_ops, num_threads)
+}
+
+fn print_speedup(thrputs: Vec<f64>) {
+    assert!(thrputs.len() > 1);
+
+    for i in 0..thrputs.len() {
+	if i == 0 {
+	    continue;
+	}
+	println!("{}", thrputs[i] / thrputs[0]);
+    }
+}
+
 fn main() {
 
-    let ht = hash_table::HashTable::new(1048576);
-    let single_thr = insert(ht, 1000000, 1);
+    let mut throughputs = Vec::new();
+    throughputs.push(run_benchmark(HT_SIZE, NUM_OPS, 1));
+    throughputs.push(run_benchmark(HT_SIZE, NUM_OPS, 2));
+    throughputs.push(run_benchmark(HT_SIZE, NUM_OPS, 4));
+    throughputs.push(run_benchmark(HT_SIZE, NUM_OPS, 8));
 
-    let mut array: [f64; 5] = [0.0; 5];
-
-    //2 Threads
-    let ht2 = hash_table::HashTable::new(1048576);
-    let two_thr = insert(ht2, 1000000, 2);
-    array[0] = two_thr/single_thr;
-    println!("1 -> 2 speedup = {}", two_thr/single_thr);
-
-    //4 Threads
-    let ht4 = hash_table::HashTable::new(1048576);
-    let four_thr = insert(ht4, 1000000, 4);
-    array[1] = four_thr/single_thr;
-    println!("1 -> 4 speedup = {}", four_thr/single_thr);
-
-    //8 Threads
-    let ht8 = hash_table::HashTable::new(1048576);
-    let eight_thr = insert(ht8, 1000000, 8);
-    array[2] = eight_thr/single_thr;
-    println!("1 -> 8 speedup = {}", eight_thr/single_thr);
-
-    //12 Threads
-    let ht12 = hash_table::HashTable::new(1048576);
-    let tw_thr = insert(ht12, 1000000, 12);
-    array[3] = tw_thr/single_thr;
-    println!("1 -> 12 speedup = {}", tw_thr/single_thr);
-
-    //24 Threads
-    let ht24 = hash_table::HashTable::new(1048576);
-    let tf_thr = insert(ht24, 1000000, 24);
-    array[4] = tf_thr/single_thr;
-    println!("1 -> 12 speedup = {}", tf_thr/single_thr);
-
+    print_speedup(throughputs.clone());
 
     //Write to csv file
-    if let Err(err) = run(&mut array) {
+    if let Err(err) = run(throughputs) {
         println!("{}", err);
         process::exit(1);
     }
 }
 
 //modified from rust docs
-fn run(arr: &mut [f64]) -> Result<(), Box<Error>> {
+fn run(arr: Vec<f64>) -> Result<(), Box<Error>> {
 
     let file_path = get_first_arg()?;
     let mut wtr = csv::Writer::from_path(file_path)?;
