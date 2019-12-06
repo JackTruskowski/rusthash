@@ -174,7 +174,8 @@ fn run(arr: Vec<(f64, f64)>) -> Result<(), Box<Error>> {
     let file_path = get_first_arg()?;
     let mut wtr = csv::Writer::from_path(file_path)?;
 
-    wtr.write_record(&[arr[0].0.to_string(), arr[1].0.to_string(), arr[2].0.to_string(), arr[3].0.to_string(), arr[4].0.to_string()])?;
+    wtr.write_record(&[1.to_string(), (arr[1].0/arr[0].0).to_string(), (arr[2].0/arr[0].0).to_string(), (arr[3].0/arr[0].0).to_string()])?;
+    wtr.write_record(&[1.to_string(), (arr[1].1/arr[0].1).to_string(), (arr[2].1/arr[0].1).to_string(), (arr[3].1/arr[0].1).to_string()])?;
 
     wtr.flush()?;
     Ok(())
