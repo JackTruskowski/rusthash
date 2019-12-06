@@ -155,9 +155,11 @@ fn main() {
 
 
     throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), 1));
-    throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), 2));
     throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), 4));
     throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), 8));
+    throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), 12));
+    throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), 16));
+    throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), 24));
 
     print_speedup(throughputs.clone());
 
@@ -174,8 +176,21 @@ fn run(arr: Vec<(f64, f64)>) -> Result<(), Box<Error>> {
     let file_path = get_first_arg()?;
     let mut wtr = csv::Writer::from_path(file_path)?;
 
-    wtr.write_record(&[1.to_string(), (arr[1].0/arr[0].0).to_string(), (arr[2].0/arr[0].0).to_string(), (arr[3].0/arr[0].0).to_string()])?;
-    wtr.write_record(&[1.to_string(), (arr[1].1/arr[0].1).to_string(), (arr[2].1/arr[0].1).to_string(), (arr[3].1/arr[0].1).to_string()])?;
+    let mut insert_records = Vec::new();
+    let mut find_records = Vec::new();
+
+    let single_speedup = arr[0];
+    insert_records.push(1.to_string());
+    find_records.push(1.to_string());
+    for i in 1..arr.len() {
+	let current_speedup = arr[i];
+	insert_records.push((current_speedup.0/single_speedup.0).to_string());
+	find_records.push((current_speedup.1/single_speedup.1).to_string());
+    }
+;
+
+    wtr.write_record(insert_records)?;
+    wtr.write_record(find_records)?;
 
     wtr.flush()?;
     Ok(())

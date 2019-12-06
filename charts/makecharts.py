@@ -2,7 +2,7 @@ import csv
 import matplotlib.pyplot as plt
 import numpy as np
 
-xs = ["1", "2", "4", "8"]
+xs = [1, 4, 8, 12, 16, 24]
 insert_ys = []
 find_ys = []
 
@@ -23,16 +23,22 @@ def insert():
     plt.figure(num = 3, figsize=(8, 5))
     plt.plot(xs, insert_ys, color='black', marker="s", linewidth=1.0)
     plt.xlabel("Threads")
-    plt.ylabel("Speedup")
+    plt.ylabel("Absolute Speedup")
     plt.title("Insertion Performance")
+    plt.legend(['Folklore Rust'])
+    plt.xticks(xs, xs)
+    plt.grid(axis='x', linestyle='--')
     plt.show()
 
 def find():
     plt.figure(num = 3, figsize=(8, 5))
     plt.plot(xs, find_ys, color='black', marker="s", linewidth=1.0)
     plt.xlabel("Threads")
-    plt.ylabel("Speedup")
+    plt.ylabel("Absolute Speedup")
     plt.title("Find Performance")
+    plt.legend(['Folklore Rust'])
+    plt.xticks(xs, xs)
+    plt.grid(axis='x', linestyle='--')
     plt.show()
 
 insert()
