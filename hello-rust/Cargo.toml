@@ -9,5 +9,8 @@ edition = "2018"
 [dependencies]
 rand = "*"
 log = "*"
+atomic-traits = "0.1.0"
+num = "0.2.0"
+fasthash = "0.4.0"
 mersenne_twister = "1.1.1"
 csv = "1.0.0-beta.5"
