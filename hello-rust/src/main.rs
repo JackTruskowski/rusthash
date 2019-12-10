@@ -9,11 +9,50 @@ use std::env;
 use std::error::Error;
 use std::ffi::OsString;
 use std::process;
+use std::collections::HashMap;
 
 mod hash_table;
 
-const HT_SIZE: u32 = 1048576; //must be power of 2
-const NUM_OPS: i32 = 1000000;
+const HT_SIZE: u32 = 67108864; //must be power of 2
+const NUM_OPS: i32 = 25000000;
+// const HT_SIZE: u32 = 16384; //must be power of 2
+// const NUM_OPS: i32 = 10000;
+
+
+fn basic_hm(inserts: Vec<(u32,u32)>) -> (f64, f64){
+    let mut my_hm = HashMap::new();
+    let mut insert_keys = inserts.clone();
+    let start = Instant::now();
+    for i in 0..NUM_OPS {
+	let tmp = insert_keys.pop();
+	match tmp {
+	    Some(x) => {
+		my_hm.insert(x.0, x.1);
+	    }
+	    None => println!("Error!"),
+	}
+    }
+    let elapsed_time = start.elapsed();
+
+    let insert_thr = NUM_OPS as f64 / (1000000 as f64) / elapsed_time.as_secs_f64();
+
+    let start = Instant::now();
+    let mut find_keys = inserts.clone();
+
+    for i in 0..NUM_OPS {
+	let tmp = find_keys.pop();
+	match tmp {
+	    Some(x) => {
+		my_hm[&x.0];
+	    }
+	    None => println!("Error!"),
+	}
+    }
+    let elapsed_time = start.elapsed();
+    let find_thr = NUM_OPS as f64 / (1000000 as f64) / elapsed_time.as_secs_f64();
+
+    (insert_thr, find_thr)
+}
 
 
 //
@@ -26,9 +65,9 @@ fn insert_and_find(ht: hash_table::HashTable, stored_keys: Vec<(u32, u32)>, num_
     let mut handles = vec![];
     let adds_per_thread = (stored_keys.len() as i32) / num_threads;
     let total_adds = stored_keys.len();
-    //let stored_keys_lock = Arc::new(Mutex::new(stored_keys.clone()));
 
     let start = Instant::now();
+
     for i in 0..num_threads {
 
         let ht = Arc::clone(&ht);
@@ -38,13 +77,17 @@ fn insert_and_find(ht: hash_table::HashTable, stored_keys: Vec<(u32, u32)>, num_
 
 	    for j in 0..adds_per_thread {
 
-		let mut val = s.pop();
-		//println!("{:?}", val);
-
-		match val {
-		    Some(x) => ht.set_item(x.0, x.1),
-		    None => println!("Problem popping a stored key"),
-		}
+		//let mut val = s.pop();
+		//randomly generate and add a (key, value)
+		let key = thread_rng().gen::<u32>();
+		let value = thread_rng().gen::<u32>();
+		// match val {
+		//     Some(x) => {
+		// 	ht.set_item(x.0, x.1);
+		//     }
+		//     None => println!("Problem popping a stored key"),
+		// }
+		ht.set_item(key, value);
 
 	    }
         });
@@ -62,29 +105,43 @@ fn insert_and_find(ht: hash_table::HashTable, stored_keys: Vec<(u32, u32)>, num_
     // }
 
     let elapsed_time = start.elapsed();
-    let in_thr = (total_adds as f64 / (1000000 as f64) / elapsed_time.as_millis() as f64); //insert throughput
+    // println!("Elapsed time (sec) = {}", elapsed_time.as_secs_f64());
+    // println!("Total adds = {}", total_adds);
+    // println!("MOps (total adds / 1,000,000) = {}", total_adds as f64 / 1000000.0);
+    let in_thr = (total_adds as f64 / (1000000 as f64) / elapsed_time.as_secs_f64()); //insert throughput
 
 
     let mut handles = vec![];
     let start = Instant::now();
     //let stored_keys_lock = Arc::new(Mutex::new(stored_keys.clone()));
+
+    let start = Instant::now();
+
+
     for i in 0..num_threads {
 
 	let ht = Arc::clone(&ht);
 	let mut s = stored_keys.clone();
 
+
         let handle = thread::spawn(move || {
 
 	    for j in 0..adds_per_thread {
 
-		let mut value : u32 = 0;
-		let mut kv_pair = s.pop();
-		match kv_pair {
-		    Some(x) => {
-			value = ht.get_item(x.0);
-		    },
-		    None => {},
-		}
+		// let mut value : u32 = 0;
+		// let kv_pair = s.pop();
+
+		let key = thread_rng().gen::<u32>();
+		let value = thread_rng().gen::<u32>();
+
+		// match kv_pair {
+		//     Some(x) => {
+		// 	value = ht.get_item(x.0);
+		//     },
+		//     None => {},
+		// }
+		let _ = ht.get_item(key)
+
 	    }
 
         });
@@ -96,11 +153,12 @@ fn insert_and_find(ht: hash_table::HashTable, stored_keys: Vec<(u32, u32)>, num_
         handle.join().unwrap();
     }
 
+
     let elapsed_time = start.elapsed();
 
-    let get_thr = (total_adds as f64 / (1000000 as f64) / elapsed_time.as_millis() as f64); //insert throughput
+    let get_thr = (total_adds as f64 / (1000000 as f64) / elapsed_time.as_secs_f64()); //find throughput
 
-
+    //(total_time, get_thr)
     (in_thr, get_thr)
 }
 
@@ -136,13 +194,19 @@ fn main() {
 	inserts.push((key, value));
     }
 
+    println!("Running the built-in Rust hashmap...");
+    let res = basic_hm(inserts.clone());
+    throughputs.push(res);
 
+    println!("Benchmarking the concurrent implementation...");
     throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), 1));
+    throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), 2));
     throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), 4));
     throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), 8));
     throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), 12));
     throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), 16));
-    throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), 24));
+    throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), 32));
+    throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), 48));
 
     print_speedup(throughputs.clone());
 
@@ -162,15 +226,12 @@ fn run(arr: Vec<(f64, f64)>) -> Result<(), Box<Error>> {
     let mut insert_records = Vec::new();
     let mut find_records = Vec::new();
 
-    let single_speedup = arr[0];
-    insert_records.push(1.to_string());
-    find_records.push(1.to_string());
-    for i in 1..arr.len() {
-	let current_speedup = arr[i];
-	insert_records.push((current_speedup.0/single_speedup.0).to_string());
-	find_records.push((current_speedup.1/single_speedup.1).to_string());
+    for i in 0..arr.len() {
+	let current_thr = arr[i];
+	insert_records.push(current_thr.0.to_string());
+	find_records.push(current_thr.1.to_string());
     }
-    ;
+
 
     wtr.write_record(insert_records)?;
     wtr.write_record(find_records)?;

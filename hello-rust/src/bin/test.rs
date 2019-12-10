@@ -34,27 +34,28 @@ fn insert_and_find(ht: hash_table_restriction1::HashTable, stored_keys: Vec<(u32
     let mut handles = vec![];
     let adds_per_thread = (stored_keys.len() as i32) / num_threads;
     let total_adds = stored_keys.len();
-    let stored_keys_lock = Arc::new(Mutex::new(stored_keys.clone()));
 
     let start = Instant::now();
     for i in 0..num_threads {
 
         let ht = Arc::clone(&ht);
-	let sk = Arc::clone(&stored_keys_lock);
 
         let handle = thread::spawn(move || {
 
 	    for j in 0..adds_per_thread {
 
-		let mut val = (0,0);
+		//let mut val = s.pop();
+		//randomly generate and add a (key, value)
+		let key = thread_rng().gen::<u32>();
+		let value = thread_rng().gen::<u32>();
+		// match val {
+		//     Some(x) => {
+		// 	ht.set_item(x.0, x.1);
+		//     }
+		//     None => println!("Problem popping a stored key"),
+		// }
+		ht.set_item(key, value);
 
-		//TODO: remove lock for performance reasons
-		{
-		    let mut s = sk.lock().unwrap();
-		    val = s.pop().unwrap();
-		}
-
-		ht.set_item(val.0, val.1);
 	    }
         });
 
@@ -79,38 +80,32 @@ fn insert_and_find(ht: hash_table_restriction1::HashTable, stored_keys: Vec<(u32
     // println!("Throughput: {:.3} ops/ms", (total_adds as f64 / elapsed_time.as_millis() as f64));
 
 
-    let in_thr = (total_adds as f64 / (1000000 as f64) / elapsed_time.as_millis() as f64); //insert throughput
+    let in_thr = (total_adds as f64 / (1000000 as f64) / elapsed_time.as_secs_f64()); //insert throughput
 
 
     let mut handles = vec![];
     let start = Instant::now();
-    let stored_keys_lock = Arc::new(Mutex::new(stored_keys.clone()));
+
     for i in 0..num_threads {
 
 	let ht = Arc::clone(&ht);
-	let sk = Arc::clone(&stored_keys_lock);
 
         let handle = thread::spawn(move || {
 
 	    for j in 0..adds_per_thread {
+		// let mut value : u32 = 0;
+		// let kv_pair = s.pop();
 
-		let mut val = (0,0);
+		let key = thread_rng().gen::<u32>();
+		let value = thread_rng().gen::<u32>();
 
-		//TODO: remove lock for performance reasons
-		{
-		    let mut s = sk.lock().unwrap();
-		    val = s.pop().unwrap();
-		}
-
-		let ret_val = ht.get_item(val.0);
-
-		//TODO: This assertion is failing. Look for possible bug in get_item method
-		// if ret_val == 0{
-		//     println!("key not found");
-		// }else{
-		//     assert_eq!(ret_val, val.1);
+		// match kv_pair {
+		//     Some(x) => {
+		// 	value = ht.get_item(x.0);
+		//     },
+		//     None => {},
 		// }
-
+		let _ = ht.get_item(key);
 	    }
         });
 
@@ -123,7 +118,7 @@ fn insert_and_find(ht: hash_table_restriction1::HashTable, stored_keys: Vec<(u32
 
     let elapsed_time = start.elapsed();
 
-    let get_thr = (total_adds as f64 / (1000000 as f64) / elapsed_time.as_millis() as f64); //insert throughput
+    let get_thr = (total_adds as f64 / (1000000 as f64) / elapsed_time.as_secs_f64()); //insert throughput
 
 
     (in_thr, get_thr)
@@ -163,11 +158,13 @@ fn main() {
 
 
     throughputs.push(run_benchmark(HT_SIZE, LOAD_FACTOR, inserts.clone(), 1));
+    throughputs.push(run_benchmark(HT_SIZE, LOAD_FACTOR, inserts.clone(), 2));
     throughputs.push(run_benchmark(HT_SIZE, LOAD_FACTOR, inserts.clone(), 4));
     throughputs.push(run_benchmark(HT_SIZE, LOAD_FACTOR, inserts.clone(), 8));
     throughputs.push(run_benchmark(HT_SIZE, LOAD_FACTOR, inserts.clone(), 12));
     throughputs.push(run_benchmark(HT_SIZE, LOAD_FACTOR, inserts.clone(), 16));
-    throughputs.push(run_benchmark(HT_SIZE, LOAD_FACTOR, inserts.clone(), 24));
+    throughputs.push(run_benchmark(HT_SIZE, LOAD_FACTOR, inserts.clone(), 32));
+    throughputs.push(run_benchmark(HT_SIZE, LOAD_FACTOR, inserts.clone(), 48));
 
     print_speedup(throughputs.clone());
 
@@ -257,7 +254,7 @@ fn get_first_arg() -> Result<OsString, Box<Error>> {
 // 		res = a.compare_and_swap(u32::MAX, 10, Ordering::Relaxed);
 // 	}
 
-// 	println!("returned:{}, saved:{}", res, a.load(Ordering::Relaxed)); 
+// 	println!("returned:{}, saved:{}", res, a.load(Ordering::Relaxed));
 // }
 
 
