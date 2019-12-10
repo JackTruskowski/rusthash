@@ -4,6 +4,11 @@
 
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::AtomicU64;
+use crossbeam::atomic::AtomicCell;
+use crossbeam::atomic::AtomicConsume;
+use atomic_refcell::AtomicRef;
+use std::sync::{Arc, Mutex};
+use std::sync::RwLock;
 use std::sync::atomic::Ordering;
 use std::convert::TryInto;
 // use std::hash::{Hash, Hasher};
@@ -12,6 +17,10 @@ use std::convert::TryInto;
 use std::u32;
 use std::mem;
 use std::cell::Cell;
+use std::rc::Rc;
+// use std::clone::Clone;
+use std::marker::Copy;
+use std::default::Default;
 // use std::hash::{Hash, Hasher};
 
 // use fasthash::{murmur3, Murmur3Hasher};
@@ -73,20 +82,35 @@ use std::cell::Cell;
 // 		self.hash(state)
 // }
 
+const TOMBSTONE:u32 = u32::MAX;
 
 
 //Rust port of Jeff Preshing's simple lock-free hash table
+// #[derive(Copy)]
+#[derive(Default)]
 pub struct Entry {
     key: AtomicU32,
     value: AtomicU32,
 }
 
+
+impl Clone for Entry {
+    fn clone(&self) -> Self {
+        Entry {
+            key: AtomicU32::new(self.key.load(Ordering::SeqCst)),
+            value: AtomicU32::new(self.value.load(Ordering::SeqCst))
+        }
+    }
+}
+
+
+
 impl Entry {
     pub fn new() -> Self{
-	Self {
-	    key: AtomicU32::new(0),
-	    value: AtomicU32::new(0)
-	}
+		Self {
+		    key: AtomicU32::new(0),
+		    value: AtomicU32::new(0)
+		}
     }
 }
 
@@ -94,10 +118,11 @@ impl Entry {
 pub struct HashTable<> {
     //size must be known at compile-time for rust arrays
     //Vectors appear to be how to do Java-style arrays
-    m_entries: Vec<Entry>,
-    m_array_size: u32,
+    // m_entries: <Vec<Entry>>,
+    m_entries: Arc<RwLock<Vec<Entry>>>,
+    m_array_size: AtomicCell<u32>,
     load_factor_thres: f32,
-    item_count: u32,
+    item_count: AtomicCell<u32>,
 }
 
 impl HashTable {
@@ -110,13 +135,12 @@ impl HashTable {
 		for _ in 0..max_size {
 		    my_vec.push(Entry::new());
 		}
-		// self.item_count.set(0)
 
 		Self {
-		    m_entries: my_vec,
-		    m_array_size: max_size,
+		    m_entries: Arc::new(RwLock::new(my_vec)),
+		    m_array_size: AtomicCell::new(max_size),
 		    load_factor_thres: load_factor,
-		    item_count: 0
+		    item_count: AtomicCell::new(0)
 		}
     }
 
@@ -148,10 +172,10 @@ impl HashTable {
   //   }
 
 
-    pub fn set_item(&mut self, key:u32, value:u32) {
+    pub fn set_item(& self, key:u32, value:u32) {
 
 		//0 reserved for 'empty' value
-		assert!(key != 0 || key != u32::MAX);
+		assert!(key != 0 && key != TOMBSTONE);
 		assert!(value != 0);
 
 		let mut idx = HashTable::integer_hash(key);
@@ -160,19 +184,20 @@ impl HashTable {
 		loop {
 
 		    //scale to size of array
-		    idx &= self.m_array_size - 1;
+		    idx &= self.m_array_size.load() - 1;
 
+		    let lockedr_entries = self.m_entries.read().unwrap();
+		    // let mut result_key = self.m_entries[HashTable::u32_to_usize(idx)].key.compare_and_swap(0, key, Ordering::Relaxed);
+		    let mut result_key = lockedr_entries[HashTable::u32_to_usize(idx)].key.compare_and_swap(0, key, Ordering::Relaxed);
 
-		    let mut result_key = self.m_entries[HashTable::u32_to_usize(idx)].key.compare_and_swap(0, key, Ordering::Relaxed);
-
-		    if result_key == u32::MAX {
-				result_key = self.m_entries[HashTable::u32_to_usize(idx)].key.compare_and_swap(u32::MAX, key, Ordering::Relaxed);		    	
+		    if result_key == TOMBSTONE {
+				result_key = lockedr_entries[HashTable::u32_to_usize(idx)].key.compare_and_swap(TOMBSTONE, key, Ordering::Relaxed);		    	
 		    }
 
-		    if result_key == 0 || result_key == key || result_key == u32::MAX {
-				self.m_entries[HashTable::u32_to_usize(idx)].value.store(value, Ordering::Relaxed);
+		    if result_key == 0 || result_key == key || result_key == TOMBSTONE {
+				lockedr_entries[HashTable::u32_to_usize(idx)].value.store(value, Ordering::Relaxed);
 				HashTable::log_message(format!("added value {} at index {}", value, idx), 2);
-				// self.item_count.set(self.item_count.get()+1);
+				self.item_count.swap(self.item_count.load()+1);
 				break;
 		    }
 
@@ -181,7 +206,7 @@ impl HashTable {
 		    idx += 1;
 		}
 
-		let load_factor: f32 = (self.get_item_count() as f32)/(self.m_array_size as f32);
+		let load_factor: f32 = (self.get_item_count() as f32)/(self.m_array_size.load() as f32);
 
 		if self.load_factor_thres < load_factor {
 			HashTable::log_message(format!("Resize required. load factor={}", load_factor), 2);
@@ -190,22 +215,117 @@ impl HashTable {
 
     }
 
+
+  //   pub fn manipulate_vec(&self) {
+
+  //   	println!("enter manipulate");
+  //   	self.print_ht_contents();
+		// println!();
+
+		// // let mut new_vec : &Vec<Entry> = &mut self.m_entries;
+		// // let locked_entries = Arc::new(Mutex::new(new_vec));
+
+		// // new_vec.clear();
+
+
+		// let mut new_array_size = HashTable::next_power_of_2_double_the(self.m_array_size.load());
+
+		// // my_vec has been updated to a clone of m_entries with same size
+		// // m_entries elements have been updated to 0
+		// // 
+
+		// self.print_ht_contents();
+		// println!();		
+
+		// // self.m_entries.resize_with(HashTable::u32_to_usize(new_array_size), Default::default);
+  //   	// let mut my_vec: Rc<Vec<Rc<Entry>>> = Rc::new(Vec::new());
+
+  //   	// for entry in &self.m_entries {
+  //   	// 	my_vec.push(entry.clone());
+  //   	// 	entry.key.store(0, Ordering::Relaxed);
+  //   	// 	entry.value.store(0, Ordering::Relaxed);
+
+  //   	// 	// self.m_entries[HashTable::u32_to_usize(idx)].key.store(0, Ordering::Relaxed);
+  //   	// 	// self.m_entries[HashTable::u32_to_usize(idx)].value.store(0, Ordering::Relaxed);
+  //   	// }
+
+
+  //   	// println!("my_vec length={}, first elem=({},{})", my_vec.len(), my_vec[0].key.load(Ordering::Relaxed), my_vec[0].value.load(Ordering::Relaxed));
+
+  //   	self.print_ht_contents();
+		// println!();
+
+		// println!("exit manipulate");
+
+  //   }
+
+
+    // fn resize(&self, this: Arc<Mutex<HashTable>>) {
+    fn resize(&self) {
+
+    	// println!("enter resize");
+    	let mut new_array_size = HashTable::next_power_of_2_double_the(self.m_array_size.load());
+    	// println!("Power of 2 for {} is {}", self.m_array_size, new_array_size);
+
+    	let mut new_vec: Vec<Entry> = Vec::new();
+		for _ in 0..new_array_size {
+		    new_vec.push(Entry::new());
+		}
+
+		// clear m_entries
+		// resize m_entries
+		// let mut new_vec = self.m_entries.to_vec();
+		// self.m_entries.resize(new_array_size, Entry::new());
+		// try to replace resize with some type of cloning
+		{
+			let mut lockedw_entries = self.m_entries.write().unwrap();
+			new_vec = lockedw_entries.to_vec();
+			lockedw_entries.clear();
+			lockedw_entries.resize_with(HashTable::u32_to_usize(new_array_size), Default::default);
+		}
+
+		new_array_size = self.m_array_size.swap(new_array_size);
+		self.item_count.swap(0);
+		// self.print_ht_contents();
+		// println!();
+
+		// m_entries swapped with new_vec
+		// m_array_size swapped with new_array_size
+
+		for idx in 0..new_array_size {
+			let probed_key = new_vec[HashTable::u32_to_usize(idx)].key.load(Ordering::Relaxed);
+			if probed_key != 0 && probed_key != TOMBSTONE {
+				let probed_value = new_vec[HashTable::u32_to_usize(idx)].value.load(Ordering::Relaxed);
+				self.set_item(probed_key, probed_value);
+			}
+
+		}
+		// self.print_ht_contents();
+		// println!();
+		// println!("exit resize");
+    }
+
+
+
     //Retrieves an item from the hashtable given a key. Returns the value if found, 0 if not found
     pub fn get_item(&self, key:u32) -> u32 {
 
-		assert!(key != 0 || key != u32::MAX);
+		assert!(key != 0 || key != TOMBSTONE);
 		let mut idx = HashTable::integer_hash(key);
 		// let mut idx = key.hash();
 		// let mut idx = hash(&key);
 
 		loop {
-		    idx &= self.m_array_size - 1;
+		    idx &= self.m_array_size.load() - 1;
 
-		    let probed_key = self.m_entries[HashTable::u32_to_usize(idx)].key.load(Ordering::Relaxed);
+        	// let mut loaded_entries = self.m_entries.into_inner();
+        	let lockedr_entries = self.m_entries.read().unwrap();
+
+		    let probed_key = lockedr_entries[HashTable::u32_to_usize(idx)].key.load(Ordering::Relaxed);
 		    if probed_key == key {
-				return self.m_entries[HashTable::u32_to_usize(idx)].value.load(Ordering::Relaxed);
+				return lockedr_entries[HashTable::u32_to_usize(idx)].value.load(Ordering::Relaxed);
 		    }
-		    if probed_key == 0 || probed_key == u32::MAX {
+		    if probed_key == 0 || probed_key == TOMBSTONE {
 				return 0
 		    }
 
@@ -216,20 +336,23 @@ impl HashTable {
 
     //Removes(tombstones) an item from the hashtable given a key. Returns the value if found, 0 if not found
     pub fn remove_item(&mut self, key:u32) -> u32 {
-    	assert!(key != 0 || key != u32::MAX);
+    	assert!(key != 0 || key != TOMBSTONE);
     	let mut idx = HashTable::integer_hash(key);
 
-    	loop {
-    		idx &= self.m_array_size - 1;
+    	// let mut loaded_entries = self.m_entries.into_inner();
 
-		    let probed_key = self.m_entries[HashTable::u32_to_usize(idx)].key.load(Ordering::Relaxed);
+    	loop {
+    		idx &= self.m_array_size.load() - 1;
+    		let lockedr_entries = self.m_entries.read().unwrap();
+
+		    let probed_key = lockedr_entries[HashTable::u32_to_usize(idx)].key.load(Ordering::Relaxed);
 		    if probed_key == key {
-		    	self.m_entries[HashTable::u32_to_usize(idx)].key.store(u32::MAX, Ordering::Relaxed);
+		    	lockedr_entries[HashTable::u32_to_usize(idx)].key.store(TOMBSTONE, Ordering::Relaxed);
 		    	HashTable::log_message(format!("removed key {} at index {}", key, idx), 2);
-		    	// self.item_count.set(self.item_count.get()-1);
-				return self.m_entries[HashTable::u32_to_usize(idx)].value.load(Ordering::Relaxed);
+		    	self.item_count.swap(self.item_count.load()-1);
+				return lockedr_entries[HashTable::u32_to_usize(idx)].value.load(Ordering::Relaxed);
 		    }
-		    if probed_key == 0 || probed_key == u32::MAX {
+		    if probed_key == 0 || probed_key == TOMBSTONE {
 				return 0
 		    }
 
@@ -238,53 +361,7 @@ impl HashTable {
     }
 
 
-    fn resize(&mut self) {
-
-    	let mut new_array_size = HashTable::next_power_of_2_double_the(self.m_array_size);
-    	// println!("Power of 2 for {} is {}", self.m_array_size, new_array_size);
-
-    	let mut new_vec: Vec<Entry> = Vec::new();
-		for _ in 0..new_array_size {
-		    new_vec.push(Entry::new());
-		}
-
-		// self.print_ht_contents();
-		// println!();
-
-
-		// let mut temp_vec = self.m_entries;
-		// self.m_entries.resize(new_array_size, Entry::new());
-
-
-
-		mem::swap(&mut self.m_entries, &mut new_vec);
-		// let mut temp_size = self.m_array_size;
-
-		mem::swap(&mut self.m_array_size, &mut new_array_size);
-		// self.item_count.set(0);
-
-		// self.print_ht_contents();
-		// println!();
-		// println!("{:?}", new_vec.len());
-
-		// m_entries swapped with new_vec
-		// m_array_size swapped with new_array_size
-
-
-		for idx in 0..new_array_size {
-			let probed_key = new_vec[HashTable::u32_to_usize(idx)].key.load(Ordering::Relaxed);
-			if probed_key != 0 && probed_key != u32::MAX {
-				let probed_value = new_vec[HashTable::u32_to_usize(idx)].value.load(Ordering::Relaxed);
-				self.set_item(probed_key, probed_value);
-			}
-
-		}
-
-		// self.print_ht_contents();
-		// println!();
-
-
-    }
+    
 
 
     fn next_power_of_2_double_the(num: u32) -> u32 {
@@ -316,22 +393,26 @@ impl HashTable {
     fn log_message(msg: String, indent_lvl: u32) {
 		if false {
 		    for _ in 0..indent_lvl {
-			print!("\t");
+				print!("\t");
 		    }
 		    println!("{}", msg);
 		}
     }
 
     pub fn print_ht_contents(&self) {
-		for i in 0..self.m_array_size {
-		    print!("{}:{}, ", self.m_entries[HashTable::u32_to_usize(i)].key.load(Ordering::Relaxed), self.m_entries[HashTable::u32_to_usize(i)].value.load(Ordering::Relaxed))
+
+    	// let mut loaded_entries = self.m_entries.into_inner();
+    	let lockedr_entries = self.m_entries.read().unwrap();
+
+		for i in 0..self.m_array_size.load() {
+		    print!("{}:{}, ", lockedr_entries[HashTable::u32_to_usize(i)].key.load(Ordering::Relaxed), lockedr_entries[HashTable::u32_to_usize(i)].value.load(Ordering::Relaxed))
 		}
     }
     //-------------END DEBUG-------------------
 
 
     pub fn get_array_size(&self) -> u32 {
-		self.m_array_size
+		self.m_array_size.load()
     }
 
 
@@ -345,15 +426,15 @@ impl HashTable {
 
 
     pub fn get_item_count(&self) -> u32 {
-    	let mut count = 0;
-    	for idx in 0..self.get_array_size() {
-    		if self.m_entries[HashTable::u32_to_usize(idx)].key.load(Ordering::Relaxed) != 0 && self.m_entries[HashTable::u32_to_usize(idx)].value.load(Ordering::Relaxed) != 0 {
-    			count += 1;
-    		}
+  //   	let mut count = 0;
+  //   	for idx in 0..self.get_array_size() {
+  //   		if self.m_entries[HashTable::u32_to_usize(idx)].key.load(Ordering::Relaxed) != 0 && self.m_entries[HashTable::u32_to_usize(idx)].value.load(Ordering::Relaxed) != 0 {
+  //   			count += 1;
+  //   		}
 
-    	}
-		count
-		// self.item_count.get()
+  //   	}
+		// count
+		self.item_count.load()
     }
 
 
@@ -361,13 +442,20 @@ impl HashTable {
     //TODO: get this to work with Arc
     pub fn clear(&mut self){
 
-		self.m_entries.clear();
-		assert!(self.m_entries.is_empty());
+    	// let mut loaded_entries = self.m_entries.into_inner();
 
-		let mut my_vec: Vec<Entry> = Vec::new();
-		for _ in 0..self.m_array_size {
-		    my_vec.push(Entry::new());
+    	// Rc::make_mut(&mut self.m_entries).clear();
+    	{
+	    	let mut lockedw_entries = self.m_entries.write().unwrap();
+
+			lockedw_entries.clear();
+			assert!(lockedw_entries.is_empty());
+
+			let mut my_vec: Vec<Entry> = Vec::new();
+			for _ in 0..self.m_array_size.load() {
+			    my_vec.push(Entry::new());
+			}
+			*lockedw_entries = my_vec;
 		}
-		self.m_entries = my_vec;
     }
 }
