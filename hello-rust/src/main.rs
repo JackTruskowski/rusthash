@@ -26,27 +26,26 @@ fn insert_and_find(ht: hash_table::HashTable, stored_keys: Vec<(u32, u32)>, num_
     let mut handles = vec![];
     let adds_per_thread = (stored_keys.len() as i32) / num_threads;
     let total_adds = stored_keys.len();
-    let stored_keys_lock = Arc::new(Mutex::new(stored_keys.clone()));
+    //let stored_keys_lock = Arc::new(Mutex::new(stored_keys.clone()));
 
     let start = Instant::now();
     for i in 0..num_threads {
 
         let ht = Arc::clone(&ht);
-	let sk = Arc::clone(&stored_keys_lock);
+	let mut s = stored_keys.clone();
 
         let handle = thread::spawn(move || {
 
 	    for j in 0..adds_per_thread {
 
-		let mut val = (0,0);
+		let mut val = s.pop();
+		//println!("{:?}", val);
 
-		//TODO: remove lock for performance reasons
-		{
-		    let mut s = sk.lock().unwrap();
-		    val = s.pop().unwrap();
+		match val {
+		    Some(x) => ht.set_item(x.0, x.1),
+		    None => println!("Problem popping a stored key"),
 		}
 
-		ht.set_item(val.0, val.1);
 	    }
         });
 
@@ -63,47 +62,31 @@ fn insert_and_find(ht: hash_table::HashTable, stored_keys: Vec<(u32, u32)>, num_
     // }
 
     let elapsed_time = start.elapsed();
-
-    // println!("----------------------------------------");
-    // println!("Number of Threads: {}", num_threads);
-    // println!("Total number of insertions: {:?}", (num_threads * (adds_per_thread as i32)));
-    // println!("Total time: {:?}", elapsed_time.as_millis());
-    // println!("Throughput: {:.3} ops/ms", (total_adds as f64 / elapsed_time.as_millis() as f64));
-
-
     let in_thr = (total_adds as f64 / (1000000 as f64) / elapsed_time.as_millis() as f64); //insert throughput
 
 
     let mut handles = vec![];
     let start = Instant::now();
-    let stored_keys_lock = Arc::new(Mutex::new(stored_keys.clone()));
+    //let stored_keys_lock = Arc::new(Mutex::new(stored_keys.clone()));
     for i in 0..num_threads {
 
 	let ht = Arc::clone(&ht);
-	let sk = Arc::clone(&stored_keys_lock);
+	let mut s = stored_keys.clone();
 
         let handle = thread::spawn(move || {
 
 	    for j in 0..adds_per_thread {
 
-		let mut val = (0,0);
-
-		//TODO: remove lock for performance reasons
-		{
-		    let mut s = sk.lock().unwrap();
-		    val = s.pop().unwrap();
+		let mut value : u32 = 0;
+		let mut kv_pair = s.pop();
+		match kv_pair {
+		    Some(x) => {
+			value = ht.get_item(x.0);
+		    },
+		    None => {},
 		}
-
-		let ret_val = ht.get_item(val.0);
-
-		//TODO: This assertion is failing. Look for possible bug in get_item method
-		// if ret_val == 0{
-		//     println!("key not found");
-		// }else{
-		//     assert_eq!(ret_val, val.1);
-		// }
-
 	    }
+
         });
 
         handles.push(handle);
@@ -187,7 +170,7 @@ fn run(arr: Vec<(f64, f64)>) -> Result<(), Box<Error>> {
 	insert_records.push((current_speedup.0/single_speedup.0).to_string());
 	find_records.push((current_speedup.1/single_speedup.1).to_string());
     }
-;
+    ;
 
     wtr.write_record(insert_records)?;
     wtr.write_record(find_records)?;
