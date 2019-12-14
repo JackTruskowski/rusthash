@@ -2,11 +2,11 @@ import csv
 import matplotlib.pyplot as plt
 import numpy as np
 
-xs = [2, 4, 8, 12, 16, 32, 48]
+xs = [1, 2, 4, 8, 12, 16, 32, 48]
 insert_ys = []
 find_ys = []
 
-filename = "48th_growing.csv"
+filename = "out_ext.csv"
 
 with open("../hello-rust/" + filename, mode="r") as csv_file:
     csv_reader = csv.reader(csv_file)
@@ -53,6 +53,7 @@ def find(do_speedup):
         plt.ylabel("Absolute Speedup\n(vs. built-in Rust HashMap)")
         for y_idx in range(1, len(find_ys)):
             ys.append(find_ys[y_idx] / find_ys[0])
+        print(ys)
     else:
         plt.ylabel("Throughput (MOps/sec)")
         ys = find_ys[1:]

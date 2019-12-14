@@ -1,19 +1,25 @@
-use std::sync::atomic::AtomicU32;
+use std::sync::atomic::{AtomicU32, AtomicU64};
 use std::sync::atomic::Ordering;
 use std::convert::TryInto;
 
 
+type UKeyAtom = AtomicU64;
+type UValAtom = AtomicU64;
+type UKey = u64;
+type UVal = u64;
+
+
 //Rust port of Jeff Preshing's simple lock-free hash table
 pub struct Entry {
-    key: AtomicU32,
-    value: AtomicU32,
+    key: UKeyAtom,
+    value: UValAtom,
 }
 
 impl Entry {
     pub fn new() -> Self{
 	Self {
-	    key: AtomicU32::new(0),
-	    value: AtomicU32::new(0)
+	    key: UKeyAtom::new(0),
+	    value: UValAtom::new(0)
 	}
     }
 }
@@ -43,19 +49,24 @@ impl HashTable {
     }
 
     //from code.google.com/p/smhasher/wiki/MurmurHash3
-    fn integer_hash(mut h: u32) -> u32 {
+    fn integer_hash(mut h: UKey) -> UKey {
     	h ^= h >> 16;
 	//wrapping_mul function achieves desired C++
 	//integer overflow wraparound behavior
 	h = h.wrapping_mul(0x85ebca6b);
     	h ^= h >> 13;
-	h = h.wrapping_mul(0xc2b2ae35u32);
+	h = h.wrapping_mul(0xc2b2ae35);
     	h ^= h >> 16;
 	h
     }
 
+    // pub fn get_entry(&self, idx:UKey) -> &Entry {
+    // 	let index : usize = idx.try_into().unwrap();
+    // 	self.m_entries[index]
+    // }
 
-    pub fn set_item(&self, key:u32, value:u32) {
+
+    pub fn set_item(&self, key:UKey, value:UVal) {
 
 	//0 reserved for 'empty' value
 	assert!(key != 0);
@@ -65,12 +76,14 @@ impl HashTable {
 	loop {
 
 	    //scale to size of array
-	    idx &= self.m_array_size - 1;
+	    idx &= (self.m_array_size - 1) as UKey;
 
-	    let result_key = self.m_entries[HashTable::u32_to_usize(idx)].key.compare_and_swap(0, key, Ordering::Relaxed);
+	    let ent : &Entry = &self.m_entries[idx as usize];
+
+	    let result_key  = ent.key.compare_and_swap(0, key, Ordering::Relaxed);
 
 	    if result_key == 0 || result_key == key {
-		self.m_entries[HashTable::u32_to_usize(idx)].value.store(value, Ordering::Relaxed);
+		ent.value.store(value, Ordering::Relaxed);
 		HashTable::log_message(format!("added value {} at index {}", value, idx), 2);
 		break;
 	    }
@@ -82,17 +95,19 @@ impl HashTable {
     }
 
     //Retrieves an item from the hashtable given a key. Returns the value if found, 0 if not found
-    pub fn get_item(&self, key:u32) -> u32 {
+    pub fn get_item(&self, key:UKey) -> UVal {
 
 	assert!(key != 0);
 	let mut idx = HashTable::integer_hash(key);
 
 	loop {
-	    idx &= self.m_array_size - 1;
+	    idx &= (self.m_array_size - 1) as UKey;
 
-	    let probed_key = self.m_entries[HashTable::u32_to_usize(idx)].key.load(Ordering::Relaxed);
+	    let ent : &Entry = &self.m_entries[idx as usize];
+
+	    let probed_key = ent.key.load(Ordering::Relaxed);
 	    if probed_key == key {
-		return self.m_entries[HashTable::u32_to_usize(idx)].value.load(Ordering::Relaxed);
+		return ent.value.load(Ordering::Relaxed);
 	    }
 	    if probed_key == 0 {
 		return 0
@@ -102,21 +117,12 @@ impl HashTable {
 	}
     }
 
-    //a couple utility functions for size conversion
-    fn u32_to_usize(key: u32) -> usize {
-	key.try_into().unwrap()
-    }
-
-    fn usize_to_u32(key: usize) -> u32 {
-	key.try_into().unwrap()
-    }
-
     //----------------DEBUG-------------------
     //a dumb little function cause I can't figure out how
     //to do debug statements when compiling with cargo
     //set the if to true for debug messages
     fn log_message(msg: String, indent_lvl: u32) {
-	if false {
+	if true {
 	    for _ in 0..indent_lvl {
 		print!("\t");
 	    }
@@ -124,11 +130,11 @@ impl HashTable {
 	}
     }
 
-    pub fn print_ht_contents(&self) {
-	for i in 0..self.m_array_size {
-	    print!("{}, ", self.m_entries[HashTable::u32_to_usize(i)].value.load(Ordering::Relaxed))
-	}
-    }
+    // pub fn print_ht_contents(&self) {
+    // 	for i in 0..self.m_array_size {
+    // 	    print!("{}, ", self.m_entries[HashTable::u32_to_usize(i)].value.load(Ordering::Relaxed))
+    // 	}
+    // }
     //-------------END DEBUG-------------------
 
 
