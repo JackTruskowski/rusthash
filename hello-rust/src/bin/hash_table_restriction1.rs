@@ -145,7 +145,7 @@ impl HashTable {
     }
 
 
-    
+
 
 
     //from code.google.com/p/smhasher/wiki/MurmurHash3
@@ -161,15 +161,16 @@ impl HashTable {
     }
 
 
-  //   //from code.google.com/p/smhasher/wiki/MurmurHash3
-  //   fn integer_hash64(mut h: u64) -> u64 {
-  //   	h ^= h >> 33;
-	 //    h = h.wrapping_mul(0xff51afd7ed558ccd);
-	 //    h ^= h >> 33;
-	 //    h = h.wrapping_mul(0xc4ceb9fe1a85ec53u64);
-	 //    h ^= h >> 33;
-		// h
-  //   }
+    //from https://stackoverflow.com/questions/664014/what-
+    //integer-hash-function-are-good-that-accepts-an-integer-hash-key
+    fn integer_hash2(mut x: u32) -> u32 {
+	x = ((x >> 16) ^ x);
+	x = x.wrapping_mul(0x45d9f3b);
+	x = ((x >> 16) ^ x);
+	x = x.wrapping_mul(0x45d9f3b);
+	x = (x >> 16) ^ x;
+	x
+    }
 
 
     pub fn set_item(& self, key:u32, value:u32) {
@@ -178,7 +179,7 @@ impl HashTable {
 		assert!(key != 0 && key != TOMBSTONE);
 		assert!(value != 0);
 
-		let mut idx = HashTable::integer_hash(key);
+		let mut idx = HashTable::integer_hash2(key);
 		// let mut idx = murmur3::hash(key);
 		// let mut idx = hash(&key);
 		loop {
@@ -191,7 +192,7 @@ impl HashTable {
 		    let mut result_key = lockedr_entries[HashTable::u32_to_usize(idx)].key.compare_and_swap(0, key, Ordering::Relaxed);
 
 		    if result_key == TOMBSTONE {
-				result_key = lockedr_entries[HashTable::u32_to_usize(idx)].key.compare_and_swap(TOMBSTONE, key, Ordering::Relaxed);		    	
+				result_key = lockedr_entries[HashTable::u32_to_usize(idx)].key.compare_and_swap(TOMBSTONE, key, Ordering::Relaxed);
 		    }
 
 		    if result_key == 0 || result_key == key || result_key == TOMBSTONE {
@@ -232,10 +233,10 @@ impl HashTable {
 
 		// // my_vec has been updated to a clone of m_entries with same size
 		// // m_entries elements have been updated to 0
-		// // 
+		// //
 
 		// self.print_ht_contents();
-		// println!();		
+		// println!();
 
 		// // self.m_entries.resize_with(HashTable::u32_to_usize(new_array_size), Default::default);
   //   	// let mut my_vec: Rc<Vec<Rc<Entry>>> = Rc::new(Vec::new());
@@ -311,7 +312,7 @@ impl HashTable {
     pub fn get_item(&self, key:u32) -> u32 {
 
 		assert!(key != 0 || key != TOMBSTONE);
-		let mut idx = HashTable::integer_hash(key);
+		let mut idx = HashTable::integer_hash2(key);
 		// let mut idx = key.hash();
 		// let mut idx = hash(&key);
 
@@ -337,7 +338,7 @@ impl HashTable {
     //Removes(tombstones) an item from the hashtable given a key. Returns the value if found, 0 if not found
     pub fn remove_item(&mut self, key:u32) -> u32 {
     	assert!(key != 0 || key != TOMBSTONE);
-    	let mut idx = HashTable::integer_hash(key);
+    	let mut idx = HashTable::integer_hash2(key);
 
     	// let mut loaded_entries = self.m_entries.into_inner();
 
@@ -356,12 +357,12 @@ impl HashTable {
 				return 0
 		    }
 
-		    idx += 1;	
+		    idx += 1;
     	}
     }
 
 
-    
+
 
 
     fn next_power_of_2_double_the(num: u32) -> u32 {

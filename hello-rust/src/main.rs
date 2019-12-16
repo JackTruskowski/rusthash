@@ -16,7 +16,7 @@ mod hash_table;
 //const NUM_OPS: i32 = 25000000;
 const HT_SIZE: u32 = 16384; //must be power of 2
 const NUM_OPS: i32 = 10000;
-type KeySize = u64;
+type KeySize = u32;
 type ValSize = u64;
 
 

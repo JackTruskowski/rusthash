@@ -3,9 +3,9 @@ use std::sync::atomic::Ordering;
 use std::convert::TryInto;
 
 
-type UKeyAtom = AtomicU64;
+type UKeyAtom = AtomicU32;
 type UValAtom = AtomicU64;
-type UKey = u64;
+type UKey = u32;
 type UVal = u64;
 
 
@@ -49,16 +49,29 @@ impl HashTable {
     }
 
     //from code.google.com/p/smhasher/wiki/MurmurHash3
-    fn integer_hash(mut h: UKey) -> UKey {
+    fn integer_hash(mut h: u32) -> u32 {
     	h ^= h >> 16;
-	//wrapping_mul function achieves desired C++
-	//integer overflow wraparound behavior
-	h = h.wrapping_mul(0x85ebca6b);
+    	//wrapping_mul function achieves desired C++
+    	//integer overflow wraparound behavior
+    	h = h.wrapping_mul(0x85ebca6b);
     	h ^= h >> 13;
-	h = h.wrapping_mul(0xc2b2ae35);
+    	h = h.wrapping_mul(0xc2b2ae35u32);
     	h ^= h >> 16;
-	h
+    	h
     }
+
+    //from https://stackoverflow.com/questions/664014/what-
+    //integer-hash-function-are-good-that-accepts-an-integer-hash-key
+    fn integer_hash2(mut x: u32) -> u32 {
+	x = ((x >> 16) ^ x);
+	x = x.wrapping_mul(0x45d9f3b);
+	x = ((x >> 16) ^ x);
+	x = x.wrapping_mul(0x45d9f3b);
+	x = (x >> 16) ^ x;
+	x
+    }
+
+
 
     // pub fn get_entry(&self, idx:UKey) -> &Entry {
     // 	let index : usize = idx.try_into().unwrap();
@@ -72,7 +85,10 @@ impl HashTable {
 	assert!(key != 0);
 	assert!(value != 0);
 
-	let mut idx = HashTable::integer_hash(key);
+	//let mut idx = HashTable::integer_hash(key);
+	//let mut idx = seahash::hash(key);
+	let mut idx = HashTable::integer_hash2(key);
+	// let mut idx = spooky::Hash128::hash(key);
 	loop {
 
 	    //scale to size of array
@@ -98,7 +114,7 @@ impl HashTable {
     pub fn get_item(&self, key:UKey) -> UVal {
 
 	assert!(key != 0);
-	let mut idx = HashTable::integer_hash(key);
+	let mut idx = HashTable::integer_hash2(key);
 
 	loop {
 	    idx &= (self.m_array_size - 1) as UKey;

@@ -19,10 +19,11 @@ extern crate atomic_refcell;
 extern crate fasthash;
 extern crate crossbeam;
 
-const HT_SIZE: u32 = 1048576; //must be power of 2
+//const HT_SIZE: u32 = 1048576; //must be power of 2
 const LOAD_FACTOR: f32 = 0.80;
-const NUM_OPS: i32 = 1000000;
-
+//const NUM_OPS: i32 = 1000000;
+const HT_SIZE: u32 = 67108864; //must be power of 2
+const NUM_OPS: i32 = 25000000;
 
 //
 //@param Hash table
