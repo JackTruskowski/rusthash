@@ -12,12 +12,12 @@ use std::collections::HashMap;
 
 mod hash_table;
 
-const HT_SIZE: u32 = 67108864; //must be power of 2
-const NUM_OPS: i32 = 25000000;
-// const HT_SIZE: u32 = 16384; //must be power of 2
-// const NUM_OPS: i32 = 10000;
-type KeySize = u64;
-type ValSize = u32;
+//const HT_SIZE: u32 = 67108864; //must be power of 2
+//const NUM_OPS: i32 = 25000000;
+const HT_SIZE: u32 = 16384; //must be power of 2
+const NUM_OPS: i32 = 10000;
+type KeySize = u32;
+type ValSize = u64;
 
 
 fn basic_hm(inserts: Vec<(KeySize,ValSize)>) -> (f64, f64){
@@ -60,7 +60,7 @@ fn basic_hm(inserts: Vec<(KeySize,ValSize)>) -> (f64, f64){
 //@param Hash table
 //@param Number of inserts for each thread
 //@param Number of threads
-fn insert_and_find_32(ht: hash_table::HashTable, stored_keys: Vec<(KeySize, ValSize)>, total_adds: i32, num_threads: i32) -> (f64, f64) {
+fn insert_and_find_32(ht: hash_table::HashTable, total_adds: i32, num_threads: i32) -> (f64, f64) {
 
     let ht = Arc::new(ht);
     let mut handles = vec![];
@@ -71,7 +71,6 @@ fn insert_and_find_32(ht: hash_table::HashTable, stored_keys: Vec<(KeySize, ValS
     for i in 0..num_threads {
 
         let ht = Arc::clone(&ht);
-	let mut s = stored_keys.clone();
 
         let handle = thread::spawn(move || {
 
@@ -87,7 +86,7 @@ fn insert_and_find_32(ht: hash_table::HashTable, stored_keys: Vec<(KeySize, ValS
                     }
                     None => println!("Problem popping a stored key"),
                 }
-                // ht.set_item(key, value);
+                ht.set_item(key, value);
 
             }
         });
@@ -161,10 +160,9 @@ fn insert_and_find_32(ht: hash_table::HashTable, stored_keys: Vec<(KeySize, ValS
     (in_thr, get_thr)
 }
 
-fn run_benchmark(ht_size: u32, inserts: Vec<(KeySize, ValSize)>, num_inserts: i32, num_threads: i32) -> (f64, f64) {
-
+fn run_benchmark(ht_size: u32, num_inserts: i32, num_threads: i32) -> (f64, f64) {
     let ht = hash_table::HashTable::new(ht_size);
-    insert_and_find_32(ht, inserts, num_inserts, num_threads)
+    insert_and_find_32(ht, num_inserts, num_threads)
 }
 
 fn print_speedup(thrputs: Vec<(f64, f64)>) {
@@ -198,14 +196,14 @@ fn main() {
     throughputs.push(res);
 
     println!("Benchmarking the concurrent implementation...");
-    throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), NUM_OPS, 1));
-    throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), NUM_OPS, 2));
-    throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), NUM_OPS, 4));
-    throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), NUM_OPS, 8));
-    throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), NUM_OPS, 12));
-    throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), NUM_OPS, 16));
-    throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), NUM_OPS, 32));
-    throughputs.push(run_benchmark(HT_SIZE, inserts.clone(), NUM_OPS, 48));
+    throughputs.push(run_benchmark(HT_SIZE, NUM_OPS, 1));
+    throughputs.push(run_benchmark(HT_SIZE, NUM_OPS, 2));
+    throughputs.push(run_benchmark(HT_SIZE, NUM_OPS, 4));
+    throughputs.push(run_benchmark(HT_SIZE, NUM_OPS, 8));
+    throughputs.push(run_benchmark(HT_SIZE, NUM_OPS, 12));
+    throughputs.push(run_benchmark(HT_SIZE, NUM_OPS, 16));
+    throughputs.push(run_benchmark(HT_SIZE, NUM_OPS, 32));
+    throughputs.push(run_benchmark(HT_SIZE, NUM_OPS, 48));
     print_speedup(throughputs.clone());
 
     //Write to csv file

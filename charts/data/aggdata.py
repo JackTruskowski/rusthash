@@ -2,7 +2,8 @@
 
 import csv
 
-sizes = ["8bit", "16bit", "32bit", "64bit"]
+#sizes = ["8bit", "16bit", "32bit", "64bit"]
+sizes = ["32bit", "64bit"]
 
 for size in sizes:
 

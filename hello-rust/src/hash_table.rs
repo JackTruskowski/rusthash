@@ -1,12 +1,12 @@
 use std::sync::atomic::{AtomicU32, AtomicU64};
 use std::sync::atomic::Ordering;
 use std::convert::TryInto;
+use murmurhash64::murmur_hash64a;
 
-
-type UKeyAtom = AtomicU32;
-type UValAtom = AtomicU64;
-type UKey = u32;
-type UVal = u64;
+type UKeyAtom = AtomicU64;
+type UValAtom = AtomicU32;
+type UKey = u64;
+type UVal = u32;
 
 
 //Rust port of Jeff Preshing's simple lock-free hash table
@@ -85,10 +85,11 @@ impl HashTable {
 	assert!(key != 0);
 	assert!(value != 0);
 
-	//let mut idx = HashTable::integer_hash(key);
-	//let mut idx = seahash::hash(key);
-	let mut idx = HashTable::integer_hash2(key);
-	// let mut idx = spooky::Hash128::hash(key);
+	//let mut idx = HashTable::integer_hash2(key);
+
+	let seed = 2915580697;
+	let mut idx = murmur_hash64a(key.to_string().as_bytes(), seed);
+
 	loop {
 
 	    //scale to size of array
@@ -114,7 +115,11 @@ impl HashTable {
     pub fn get_item(&self, key:UKey) -> UVal {
 
 	assert!(key != 0);
-	let mut idx = HashTable::integer_hash2(key);
+
+
+	let seed = 2915580697;
+	let mut idx = murmur_hash64a(key.to_string().as_bytes(), seed);
+	//let mut idx = HashTable::integer_hash2(key);
 
 	loop {
 	    idx &= (self.m_array_size - 1) as UKey;
