@@ -12,12 +12,19 @@ use std::collections::HashMap;
 
 mod hash_table;
 
-const HT_SIZE: u32 = 67108864; //must be power of 2
-const NUM_OPS: i32 = 25000000;
-// const HT_SIZE: u32 = 16384; //must be power of 2
-// const NUM_OPS: i32 = 10000;
-type KeySize = u64;
+
+// @todo -- change for different key/value sizes
+type KeySize = u32;
 type ValSize = u32;
+
+// Full test
+// const HT_SIZE: u32 = 67108864;//must be power of 2
+// const NUM_OPS: i32 = 25000000;
+
+// Small test
+const HT_SIZE: u32 = 16384; //must be power of 2
+const NUM_OPS: i32 = 10000;
+
 
 
 fn basic_hm(inserts: Vec<(KeySize,ValSize)>) -> (f64, f64){
@@ -71,23 +78,25 @@ fn insert_and_find_32(ht: hash_table::HashTable, stored_keys: Vec<(KeySize, ValS
     for i in 0..num_threads {
 
         let ht = Arc::clone(&ht);
-	let mut s = stored_keys.clone();
+	//let mut s = stored_keys.clone();
 
         let handle = thread::spawn(move || {
 
             for j in 0..adds_per_thread {
 
-                let mut val = s.pop();
+                //let mut val = s.pop();
+
                 //randomly generate and add a (key, value)
-                // let key = thread_rng().gen::<KeySize>();
-                // let value = thread_rng().gen::<ValSize>();
-                match val {
-                    Some(x) => {
-			ht.set_item(x.0, x.1);
-                    }
-                    None => println!("Problem popping a stored key"),
-                }
-                // ht.set_item(key, value);
+                let key = thread_rng().gen::<KeySize>();
+                let value = thread_rng().gen::<ValSize>();
+
+                // match val {
+                //     Some(x) => {
+		// 	ht.set_item(x.0, x.1);
+                //     }
+                //     None => println!("Problem popping a stored key"),
+                // }
+                ht.set_item(key, value);
 
             }
         });
@@ -105,24 +114,21 @@ fn insert_and_find_32(ht: hash_table::HashTable, stored_keys: Vec<(KeySize, ValS
     // }
 
     let elapsed_time = start.elapsed();
+
+    // DEBUG
     // println!("Elapsed time (sec) = {}", elapsed_time.as_secs_f64());
     // println!("Total adds = {}", total_adds);
     // println!("MOps (total adds / 1,000,000) = {}", total_adds as f64 / 1000000.0);
-    let in_thr = (total_adds as f64 / (1000000 as f64) / elapsed_time.as_secs_f64()); //insert throughput
+
+    let in_thr = (total_adds as f64 / 1000000.0 / elapsed_time.as_secs_f64()); //insert throughput
 
 
     let mut handles = vec![];
-    let start = Instant::now();
-    //let stored_keys_lock = Arc::new(Mutex::new(stored_keys.clone()));
 
     let start = Instant::now();
-
-
     for i in 0..num_threads {
 
         let ht = Arc::clone(&ht);
-
-
         let handle = thread::spawn(move || {
 
             for j in 0..adds_per_thread {
@@ -155,9 +161,9 @@ fn insert_and_find_32(ht: hash_table::HashTable, stored_keys: Vec<(KeySize, ValS
 
     let elapsed_time = start.elapsed();
 
-    let get_thr = (total_adds as f64 / (1000000 as f64) / elapsed_time.as_secs_f64()); //find throughput
+    let get_thr = (total_adds as f64 / 1000000.0 / elapsed_time.as_secs_f64()); //find throughput
 
-    //(total_time, get_thr)
+    //returns the (insert throughput, find throughput)
     (in_thr, get_thr)
 }
 

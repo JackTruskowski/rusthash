@@ -6,7 +6,7 @@ xs = [1, 2, 4, 8, 12, 16, 32, 48]
 insert_ys = []
 find_ys = []
 
-filename = "testout2.csv"
+filename = "out.csv"
 
 with open("../hello-rust/" + filename, mode="r") as csv_file:
     csv_reader = csv.reader(csv_file)

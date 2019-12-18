@@ -1,11 +1,15 @@
 use std::sync::atomic::{AtomicU32, AtomicU64};
 use std::sync::atomic::Ordering;
 use std::convert::TryInto;
-use murmurhash64::murmur_hash64a;
+use std::hash::{Hash, Hasher};
+use fasthash::{spooky, SpookyHasher};
 
-type UKeyAtom = AtomicU64;
+
+//@todo -- change these for different key/value sizes
+// they should match the values in main.rs
+type UKeyAtom = AtomicU32;
 type UValAtom = AtomicU32;
-type UKey = u64;
+type UKey = u32;
 type UVal = u32;
 
 
@@ -25,8 +29,6 @@ impl Entry {
 }
 
 pub struct HashTable {
-    //size must be known at compile-time for rust arrays
-    //Vectors appear to be how to do Java-style arrays
     m_entries: Vec<Entry>,
     m_array_size: u32,
 }
@@ -48,6 +50,7 @@ impl HashTable {
 	}
     }
 
+    //old hash function
     //from code.google.com/p/smhasher/wiki/MurmurHash3
     fn integer_hash(mut h: u32) -> u32 {
     	h ^= h >> 16;
@@ -60,6 +63,7 @@ impl HashTable {
     	h
     }
 
+    //old hash function
     //from https://stackoverflow.com/questions/664014/what-
     //integer-hash-function-are-good-that-accepts-an-integer-hash-key
     fn integer_hash2(mut x: u32) -> u32 {
@@ -71,24 +75,14 @@ impl HashTable {
 	x
     }
 
-
-
-    // pub fn get_entry(&self, idx:UKey) -> &Entry {
-    // 	let index : usize = idx.try_into().unwrap();
-    // 	self.m_entries[index]
-    // }
-
-
     pub fn set_item(&self, key:UKey, value:UVal) {
 
 	//0 reserved for 'empty' value
 	assert!(key != 0);
 	assert!(value != 0);
 
-	//let mut idx = HashTable::integer_hash2(key);
-
-	let seed = 2915580697;
-	let mut idx = murmur_hash64a(key.to_string().as_bytes(), seed);
+	//@todo supply the correct hash function
+	let mut idx = spooky::hash32(key.to_string().as_bytes());
 
 	loop {
 
@@ -116,9 +110,8 @@ impl HashTable {
 
 	assert!(key != 0);
 
-
-	let seed = 2915580697;
-	let mut idx = murmur_hash64a(key.to_string().as_bytes(), seed);
+	// @todo supply correct hash function
+	let mut idx = spooky::hash32(key.to_string().as_bytes());
 	//let mut idx = HashTable::integer_hash2(key);
 
 	loop {
